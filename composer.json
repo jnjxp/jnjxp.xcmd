@@ -1,0 +1,25 @@
+{
+    "name": "jnjxp/xcmd",
+    "description": "Simple external command runner",
+    "type": "library",
+    "require": {
+        "aura/payload": "^3.0"
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "jake johns",
+            "email": "jake@jakejohns.net"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Jnjxp\\Xcmd\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Jnjxp\\Xcmd\\": "tests/"
+        }
+    }
+}
