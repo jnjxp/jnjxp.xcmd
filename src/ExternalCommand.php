@@ -89,6 +89,24 @@ class ExternalCommand
     protected $throwException = false;
 
     /**
+     * Pipes
+     *
+     * @var mixed
+     *
+     * @access protected
+     */
+    protected $pipes;
+
+    /**
+     * Resource
+     *
+     * @var mixed
+     *
+     * @access protected
+     */
+    protected $resource;
+
+    /**
      * __construct
      *
      * @param string $command command to run
@@ -155,46 +173,19 @@ class ExternalCommand
      */
     public function __invoke($input = null)
     {
-        $process = proc_open(
-            $this->command,
-            $this->descriptors,
-            $pipes,
-            $this->cwd,
-            $this->env
-        );
+        $this->openProcess();
+        $this->assertResource();
 
-        // @codeCoverageIgnoreStart
-        if (! is_resource($process)) {
-            throw new Exception('proc_open failed');
-        }
-        // @codeCoverageIgnoreEnd
-
-        $stdin  = $pipes[0];
-        $stdout = $pipes[1];
-        $stderr = $pipes[2];
-
-        if (null !== $input) {
-            fwrite($stdin, $input);
-        }
-
-        fclose($stdin);
-
-        $out = stream_get_contents($stdout);
-        fclose($stdout);
-
-        $error = stream_get_contents($stderr);
-        fclose($stderr);
-
-        $status = proc_close($process);
-
-        if ($this->throwException && $status > 0) {
-            throw new Exception($error, $status);
-        }
+        $this->sendInput($input);
+        $output = $this->readOutput();
+        $error  = $this->readError();
+        $status = $this->getStatus();
+        $this->assertValidStatus($status, $error);
 
         return $this->payload()
             ->setStatus($status)
             ->setInput($input)
-            ->setOutput(trim($out))
+            ->setOutput(trim($output))
             ->setMessages($this->formatErrors($error))
             ->setExtras(
                 [
@@ -203,6 +194,122 @@ class ExternalCommand
                     'env'     => $this->env
                 ]
             );
+    }
+
+    /**
+     * OpenProcess
+     *
+     * @return \Resource
+     *
+     * @access protected
+     */
+    protected function openProcess()
+    {
+        $this->resource = proc_open(
+            $this->command,
+            $this->descriptors,
+            $this->pipes,
+            $this->cwd,
+            $this->env
+        );
+    }
+
+    /**
+     * AssertResource
+     *
+     * @return mixed
+     * @throws exceptionclass [description]
+     *
+     * @access protected
+     */
+    protected function assertResource()
+    {
+        // @codeCoverageIgnoreStart
+        if (! is_resource($this->resource)) {
+            throw new Exception('proc_open failed');
+        }
+        // @codeCoverageIgnoreEnd
+    }
+
+    /**
+     * AssertValidStatus
+     *
+     * @param mixed $status DESCRIPTION
+     * @param mixed $error  DESCRIPTION
+     *
+     * @return mixed
+     * @throws exceptionclass [description]
+     *
+     * @access protected
+     */
+    protected function assertValidStatus($status, $error)
+    {
+        if ($this->throwException && $status > 0) {
+            throw new Exception($error, $status);
+        }
+    }
+
+    /**
+     * SendInput
+     *
+     * @param mixed $input DESCRIPTION
+     *
+     * @return mixed
+     * @throws exceptionclass [description]
+     *
+     * @access protected
+     */
+    protected function sendInput($input = null)
+    {
+        $stdin = $this->pipes[0];
+        if (null !== $input) {
+            fwrite($stdin, $input);
+        }
+
+        fclose($stdin);
+    }
+
+    /**
+     * ReadOutput
+     *
+     * @return mixed
+     *
+     * @access protected
+     */
+    protected function readOutput()
+    {
+        $stdout = $this->pipes[1];
+        $out = stream_get_contents($stdout);
+        fclose($stdout);
+        return $out;
+    }
+
+    /**
+     * ReadErrors
+     *
+     * @return mixed
+     *
+     * @access protected
+     */
+    protected function readError()
+    {
+        $stderr = $this->pipes[2];
+        $error  = stream_get_contents($stderr);
+        fclose($stderr);
+        return $error;
+    }
+
+    /**
+     * GetStatus
+     *
+     * @return mixed
+     * @throws exceptionclass [description]
+     *
+     * @access protected
+     */
+    protected function getStatus()
+    {
+        return proc_close($this->resource);
     }
 
     /**
