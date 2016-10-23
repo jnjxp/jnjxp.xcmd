@@ -14,7 +14,7 @@
  * @author    Jake Johns <jake@jakejohns.net>
  * @copyright 2016 Jake Johns
  * @license   http://jnj.mit-license.org/2016 MIT License
- * @link      http://jakejohns.net
+ * @link      https://github.com/jnjxp/jnjxp.xcmd 
  */
 
 namespace Jnjxp\Xcmd;
@@ -26,12 +26,16 @@ namespace Jnjxp\Xcmd;
  * @package  Jnjxp\Xcmd
  * @author   Jake Johns <jake@jakejohns.net>
  * @license  http://jnj.mit-license.org/ MIT License
- * @link     http://jakejohns.net
+ * @link     https://github.com/jnjxp/jnjxp.xcmd
  */
 class ExternalCommand
 {
     /**
      * Descriptors
+     *
+     * An indexed array where the key represents the descriptor number and the
+     * value represents how PHP will pass that descriptor to the child process. 0
+     * is stdin, 1 is stdout, while 2 is stderr.
      *
      * @var array
      *
@@ -46,6 +50,10 @@ class ExternalCommand
     /**
      * Current Working Directory
      *
+     * The initial working dir for the command. This must be an absolute
+     * directory path, or NULL if you want to use the default value (the working
+     * dir of the current PHP process)
+     *
      * @var null|string
      *
      * @access protected
@@ -55,6 +63,9 @@ class ExternalCommand
     /**
      * ENV
      *
+     * An array with the environment variables for the command that will be run,
+     * or NULL to use the same environment as the current PHP process
+     *
      * @var array
      *
      * @access protected
@@ -63,6 +74,8 @@ class ExternalCommand
 
     /**
      * Command
+     *
+     * The command to execute
      *
      * @var string
      *
@@ -91,6 +104,9 @@ class ExternalCommand
     /**
      * Pipes
      *
+     * Will be set to an indexed array of file pointers that correspond to PHP's
+     * end of any pipes that are created.
+     *
      * @var mixed
      *
      * @access protected
@@ -100,11 +116,40 @@ class ExternalCommand
     /**
      * Resource
      *
-     * @var mixed
+     * A resource representing the process
+     *
+     * @var resource|false
      *
      * @access protected
      */
     protected $resource;
+
+    /**
+     * Input
+     *
+     * @var string|null
+     *
+     * @access protected
+     */
+    protected $input;
+
+    /**
+     * Output
+     *
+     * @var string
+     *
+     * @access protected
+     */
+    protected $output;
+
+    /**
+     * Error
+     *
+     * @var string
+     *
+     * @access protected
+     */
+    protected $error;
 
     /**
      * __construct
@@ -167,26 +212,39 @@ class ExternalCommand
      * @param null|string $input command input
      *
      * @return Payload
-     * @throws Exception if process not created or throwException is true
+     *
+     * @throws Exception if process not created
+     * @throws Exception if ThrowException=true & invalid exit status
      *
      * @access public
      */
     public function __invoke($input = null)
     {
+        $this->input = $input;
+
         $this->openProcess();
-        $this->assertResource();
+        $this->sendInput();
+        $this->readOutput();
+        $this->readError();
+        $this->closeProcess();
 
-        $this->sendInput($input);
-        $output = $this->readOutput();
-        $error  = $this->readError();
-        $status = $this->getStatus();
-        $this->assertValidStatus($status, $error);
+        return $this->returnPayload();
+    }
 
+    /**
+     * Return Payload
+     *
+     * @return Payload
+     *
+     * @access protected
+     */
+    protected function returnPayload()
+    {
         return $this->payload()
-            ->setStatus($status)
-            ->setInput($input)
-            ->setOutput(trim($output))
-            ->setMessages($this->formatErrors($error))
+            ->setStatus($this->status)
+            ->setInput($this->input)
+            ->setOutput(trim($this->output))
+            ->setMessages($this->formatErrors())
             ->setExtras(
                 [
                     'command' => $this->command,
@@ -197,9 +255,11 @@ class ExternalCommand
     }
 
     /**
-     * OpenProcess
+     * Open Process
      *
-     * @return \Resource
+     * @return null
+     *
+     * @throws Exception if process not created
      *
      * @access protected
      */
@@ -212,18 +272,7 @@ class ExternalCommand
             $this->cwd,
             $this->env
         );
-    }
 
-    /**
-     * AssertResource
-     *
-     * @return mixed
-     * @throws exceptionclass [description]
-     *
-     * @access protected
-     */
-    protected function assertResource()
-    {
         // @codeCoverageIgnoreStart
         if (! is_resource($this->resource)) {
             throw new Exception('proc_open failed');
@@ -232,107 +281,99 @@ class ExternalCommand
     }
 
     /**
-     * AssertValidStatus
+     * Send Input
      *
-     * @param mixed $status DESCRIPTION
-     * @param mixed $error  DESCRIPTION
-     *
-     * @return mixed
-     * @throws exceptionclass [description]
+     * @return null
      *
      * @access protected
      */
-    protected function assertValidStatus($status, $error)
-    {
-        if ($this->throwException && $status > 0) {
-            throw new Exception($error, $status);
-        }
-    }
-
-    /**
-     * SendInput
-     *
-     * @param mixed $input DESCRIPTION
-     *
-     * @return mixed
-     * @throws exceptionclass [description]
-     *
-     * @access protected
-     */
-    protected function sendInput($input = null)
+    protected function sendInput()
     {
         $stdin = $this->pipes[0];
-        if (null !== $input) {
-            fwrite($stdin, $input);
+        if (null !== $this->input) {
+            fwrite($stdin, $this->input);
         }
 
         fclose($stdin);
     }
 
     /**
-     * ReadOutput
+     * Read Output
      *
-     * @return mixed
+     * @return null
      *
      * @access protected
      */
     protected function readOutput()
     {
         $stdout = $this->pipes[1];
-        $out = stream_get_contents($stdout);
+        $this->output = stream_get_contents($stdout);
         fclose($stdout);
-        return $out;
     }
 
     /**
-     * ReadErrors
+     * Read Error
      *
-     * @return mixed
+     * @return null
      *
      * @access protected
      */
     protected function readError()
     {
         $stderr = $this->pipes[2];
-        $error  = stream_get_contents($stderr);
+        $this->error  = stream_get_contents($stderr);
         fclose($stderr);
-        return $error;
     }
 
     /**
-     * GetStatus
+     * Close Process
      *
-     * @return mixed
-     * @throws exceptionclass [description]
+     * @return null
+     * @throws Exception if throwException = true & invalid exit status
      *
      * @access protected
      */
-    protected function getStatus()
+    protected function closeProcess()
     {
-        return proc_close($this->resource);
+        $this->status = proc_close($this->resource);
+        $this->assertValidStatus();
     }
 
     /**
-     * FormatErrors
+     * Assert Valid Status
      *
-     * @param mixed $error DESCRIPTION
+     * @return null
      *
-     * @return mixed
+     * @throws Exception if throwException = true & exit status > 0
      *
      * @access protected
      */
-    protected function formatErrors($error)
+    protected function assertValidStatus()
     {
-        if (!$error) {
+        if ($this->throwException && $this->status > 0) {
+            throw new Exception($this->error, $this->status);
+        }
+    }
+
+    /**
+     * Format Errors
+     *
+     * @return array
+     *
+     * @access protected
+     */
+    protected function formatErrors()
+    {
+        if (!$this->error) {
             return [];
         }
-        return array_filter(explode("\n", $error));
+        return array_filter(explode("\n", $this->error));
     }
 
     /**
      * Payload
      *
-     * @return mixed
+     * @return Payload
      *
      * @access protected
      */
