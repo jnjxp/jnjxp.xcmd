@@ -152,6 +152,15 @@ class ExternalCommand
     protected $error;
 
     /**
+     * Exit Status
+     *
+     * @var int
+     *
+     * @access protected
+     */
+    protected $exitStatus;
+
+    /**
      * __construct
      *
      * @param string $command command to run
@@ -241,7 +250,7 @@ class ExternalCommand
     protected function returnPayload()
     {
         return $this->payload()
-            ->setStatus($this->status)
+            ->setStatus($this->exitStatus)
             ->setInput($this->input)
             ->setOutput(trim($this->output))
             ->setMessages($this->formatErrors())
@@ -335,7 +344,7 @@ class ExternalCommand
      */
     protected function closeProcess()
     {
-        $this->status = proc_close($this->resource);
+        $this->exitStatus = proc_close($this->resource);
         $this->assertValidStatus();
     }
 
@@ -350,8 +359,8 @@ class ExternalCommand
      */
     protected function assertValidStatus()
     {
-        if ($this->throwException && $this->status > 0) {
-            throw new Exception($this->error, $this->status);
+        if ($this->throwException && $this->exitStatus > 0) {
+            throw new Exception($this->error, $this->exitStatus);
         }
     }
 
