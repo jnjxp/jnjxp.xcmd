@@ -32,7 +32,7 @@ echo $payload;
 
 
 [ico-version]: https://img.shields.io/packagist/v/jnjxp/xcmd.svg?style=flat-square
-[ico-travis]: https://img.shields.io/travis/jnjxp/jnjxp.xcmd/master.svg?style=flat-square
+[ico-travis]: https://img.shields.io/travis/jnjxp/jnjxp.xcmd/develop.svg?style=flat-square
 [ico-scrutinizer]: https://img.shields.io/scrutinizer/coverage/g/jnjxp/jnjxp.xcmd.svg?style=flat-square
 [ico-code-quality]: https://img.shields.io/scrutinizer/g/jnjxp/jnjxp.xcmd.svg?style=flat-square
 
